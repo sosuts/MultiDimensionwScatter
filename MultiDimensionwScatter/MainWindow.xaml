@@ -9,11 +9,11 @@
         mc:Ignorable="d"
         Title="3D Gaussian Mixture Scatter"
         Height="700"
-        Width="1100">
+        Width="1300">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="420" />
+            <ColumnDefinition Width="700" />
         </Grid.ColumnDefinitions>
         <!-- Plot Area -->
         <Grid Grid.Column="0"
@@ -153,6 +153,26 @@
                                     Height="32"
                                     Margin="8,0,0,0"
                                     Click="BtnClear_Click" />
+                        </StackPanel>
+
+                        <!-- Volume controls -->
+                        <Separator Margin="0,12,0,8" />
+                        <TextBlock Text="Volume (Analytic GMM Density)" FontWeight="Bold" />
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="Resolution:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox Name="TxtVolRes" Width="60" Text="64"/>
+                            <TextBlock Text="  Bounds ±σ:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                            <TextBox Name="TxtSigmaK" Width="40" Text="3"/>
+                            <Button Name="BtnGenVol" Content="ボリューム生成" Width="120" Margin="12,0,0,0" Click="BtnGenVol_Click"/>
+                            <Button Name="BtnClearVol" Content="ボリューム消去" Width="120" Margin="6,0,0,0" Click="BtnClearVol_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Vertical" Margin="0,6,0,0">
+                            <TextBlock Text="Slices (X/Y/Z)" />
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <Slider Name="SliderX" Minimum="0" Maximum="63" Value="32" Width="110" Margin="0,0,6,0" ValueChanged="SliderX_ValueChanged"/>
+                                <Slider Name="SliderY" Minimum="0" Maximum="63" Value="32" Width="110" Margin="0,0,6,0" ValueChanged="SliderY_ValueChanged"/>
+                                <Slider Name="SliderZ" Minimum="0" Maximum="63" Value="32" Width="110" ValueChanged="SliderZ_ValueChanged"/>
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
