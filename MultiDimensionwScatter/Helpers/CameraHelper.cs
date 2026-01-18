@@ -83,6 +83,9 @@ namespace MultiDimensionwScatter.Helpers
                 Width = width
             };
             viewport.Camera = cam;
+
+            // Ensure immediate update
+            viewport.ZoomExtents();
         }
     }
 }
