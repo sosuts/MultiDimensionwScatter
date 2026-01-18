@@ -1,175 +1,211 @@
-﻿# MultiDimensionwScatter 詳細設計書
+﻿# MultiDimensionwScatter README / 内部設計書
 
-本プロジェクトは、WPF(.NET Framework 4.6.2, C# 7.3)上で HelixToolkit.Wpf.SharpDX を用いて、3次元ガウス混合モデル(Gaussian Mixture Model; GMM)の散布図を描画し、非対話の2D投影(XY, XZ, YZ)を表示するツールです。各成分の平均ベクトル・共分散行列からサンプルを生成し、色分けして描画します。さらに、軸表示、シード指定、重みによるサンプル配分、共分散ランダム生成などの機能を提供しています。
+本プロジェクトは、WPF (.NET Framework 4.6.2, C# 7.3) 上で HelixToolkit.Wpf.SharpDX を用い、3次元ガウス混合モデル (Gaussian Mixture Model; GMM) の散布図を高速に描画し、XY/XZ/YZ の2D投影画像を生成・表示するツールです。HelixToolkit の `Viewport3DX` / `PointGeometryModel3D` により大量点を安定・高速に描画します。
 
-## 技術スタック
-- WPF(.NET Framework 4.6.2)
-- C# 7.3
-- HelixToolkit.Wpf.SharpDX(3D可視化)
-- SharpDX(ベクトル・色型など HelixToolkit が内部で使用)
+このドキュメントは、外部利用者のガイドと、開発者の内部設計書（構成・責務・処理フロー・拡張方針）を兼ねます。
 
-## アーキテクチャ概要
--`MainWindow.xaml`:
-  - 3D表示用の`Viewport3DX`と散布図モデル`PointGeometryModel3D`、軸ライン用`LineGeometryModel3D`を定義
-  - 右ペイン(パラメータパネル)に各種操作UI(成分一覧`DataGrid`、生成・クリアボタン、ボリューム未実装のスライダー、2D投影の`Image`など)
--`MainWindow.xaml.cs`:
-  - ViewModel的な役割を兼ねるコードビハインド
-  - データ生成、幾何更新、軸表示更新、2D投影生成、共分散ランダム生成のロジックを実装
--`Models/ComponentParam.cs`(想定):
-  - 混合成分の重み、平均、共分散要素、サンプル数、色などのプロパティを保持
+## 目次
+- ゴール / 機能
+- 動作環境 / 依存関係
+- システム全体構成
+- モジュール設計 / クラス責務
+- データモデル設計
+- UI設計 / バインディング
+- 3D描画設計（HelixToolkit/SharpDX）
+- サンプル生成アルゴリズム（GMM）
+- 2D投影レンダリング設計
+- カメラ / 軸 / 補助オブジェクト
+- エラーハンドリング / 入力検証
+- パフォーマンス設計 / チューニング
+- セットアップ / ビルド / 実行手順
+- トラブルシューティング
+- 拡張設計（ロードマップ）
+- ライブラリ API メモ
+- ライセンス / 注意
+- 参考リンク
 
-## 主要パッケージの使い方
-- HelixToolkit.Wpf.SharpDX
-  -`DefaultEffectsManager`: エフェクト管理(マテリアル/シェーダ)
-  -`Viewport3DX`: 3Dカメラ・ライト・モデルを配置するコンテナ
-  -`PointGeometryModel3D`: 点群描画のためのモデル。`Geometry`に`PointGeometry3D`を与える
-  -`PointGeometry3D`:`Positions(Vector3Collection)`と`Colors(Color4Collection)`を持つ点群幾何
-  -`LineGeometryModel3D`: 軸などの線分描画。`Geometry`に`LineGeometry3D`を与える
-  -`LineBuilder`: 線分を追加して`LineGeometry3D`に変換する補助クラス
-- WPF 2D描画
-  -`DrawingVisual`+`RenderTargetBitmap`で非対話の 2D 投影画像を合成し、`Image.Source`に設定
+---
 
-## SharpDX のAPIと使用目的
-本プロジェクトでは、HelixToolkit.Wpf.SharpDX が内部で SharpDX の型・リソースを活用しています。アプリコードから直接操作している主な SharpDX 型は次の通りです。
+## ゴール / 機能
+- HelixToolkit.Wpf.SharpDX による 3D 散布図の高速描画
+- GMM（複数成分）の平均・共分散に基づくサンプル生成
+- 成分ごとの色分け / 点サイズ指定（ピクセル単位）
+- 軸表示（X/Y/Z）と半透明壁面（XY/XZ/YZ）
+- XY/XZ/YZ の 2D 投影画像生成（非対話）
+- 乱数シードの入力 / ランダム化、重みに基づくサンプル数自動配分
+- 共分散ランダム生成（SPD, 異方性バイアス）
+- カメラの直交ビュー切替
 
--`SharpDX.Vector3`
-  - 目的: 3D点群の頂点座標表現。
-  - 使用箇所:`PointGeometry3D.Positions`に格納する各サンプル点(`new Vector3(x, y, z)`)。
-  - 背景: HelixToolkit の`Vector3Collection`は SharpDX の`Vector3`を要素型に取ります。頂点バッファに反映されます。
+## 動作環境 / 依存関係
+- OS: Windows 10/11
+- .NET: .NET Framework 4.6.2（C# 7.3）
+- IDE: Visual Studio 2019/2022
+- NuGet 依存:
+  - HelixToolkit.Wpf.SharpDX
+  - SharpDX（HelixToolkit の内部依存）
 
--`SharpDX.Color4`
-  - 目的: 各点の RGBA 色表現。
-  - 使用箇所:`PointGeometry3D.Colors`に各サンプルの色を設定(WPF`Color`から`Color4`に変換)。
-  - 背景: HelixToolkit の`Color4Collection`は GPU へ配列としてアップロードされ、ポイント描画時のカラーに利用されます。
+## システム全体構成
+- プレゼンテーション層: WPF（XAML + Code-behind）
+- 3D描画基盤: HelixToolkit.Wpf.SharpDX（Viewport3DX / EffectsManager / Model3D）
+- ロジック層: `MainWindow.xaml.cs`（生成・描画・UI操作ハンドラ）
+- ヘルパ層: 共分散生成 / 投影レンダリング / カメラ補助
+- データモデル層: `ComponentParam`（GMM成分設定）
 
-- HelixToolkit 経由の SharpDX リソース
-  -`DefaultEffectsManager`
-    - 目的: シェーダ/パイプラインの管理。マテリアル、頂点/ピクセルシェーダ、レンダリングステートの初期化。
-    - 拡張性: PBR マテリアル、カスタムシェーダへの差し替え、ライティング拡張。
-  -`Viewport3DX`
-    - 目的: デバイス・スワップチェイン管理、カメラ・ライト・モデルのレンダリング統合。
-    - 拡張性: マルチパスレンダ、ポストプロセス(FXAA/SSAO)、スナップショット出力などの拡張が可能。
+ディレクトリ（概念）
+- `MainWindow.xaml` / `MainWindow.xaml.cs`: 画面・ロジック
+- `Models/ComponentParam.cs`: データモデル
+- `Helpers/*`: アルゴリズム・ユーティリティ
 
-補足として、`LineGeometryModel3D`/`PointGeometryModel3D`は SharpDX の頂点バッファ/インデックスバッファを HelixToolkit が生成して描画します。アプリ側は`Vector3Collection`/`Color4Collection`を更新するだけで GPU バッファへ反映されます。
+## モジュール設計 / クラス責務
+- `MainWindow`
+  - 役割: 画面の初期化、イベントハンドリング、生成と描画の中核、軸/壁面/投影の更新
+  - 主要フィールド:
+    - `ObservableCollection<ComponentParam> _components`: 成分一覧（DataGrid バインド）
+    - `IEffectsManager EffectsManager = new DefaultEffectsManager()`: HelixToolkit のエフェクト管理
+    - `PointGeometry3D _scatterGeometry`: 散布図の既定ジオメトリ（Positions/Colors 保持）
+    - `ScatterModel`: XAML 側の `PointGeometryModel3D`（`Geometry`に点群を設定）
+    - 軸モデル: `AxisXModel`, `AxisYModel`, `AxisZModel`
+    - 壁面モデル: `WallXModel`, `WallYModel`, `WallZModel`
+  - 主要メソッド:
+    - `InitializeDefaults()`: 初期成分の追加
+    - `BtnGenerate_Click`: 入力検証→配分→生成→ジオメトリ更新→軸/投影更新
+    - `ClearPoints()`: ジオメトリをクリアし、軸/投影を更新
+    - `UpdateAxes()`: 現在の点群からスケール計算し、軸と壁面を構築
+    - `BuildWalls(...)`: XY/XZ/YZ の半透明クアッド生成
+    - `UpdateProjections()`: 点群から 2D 投影画像生成
+    - `TryCholesky3x3(...)`: SPD 検証と下三角分解
+- `ComponentParam`
+  - 役割: 1成分の GMM パラメータ（重み、平均、共分散、色、サンプル数）
+- `CovarianceGenerator`
+  - 役割: ランダムな SPD 共分散行列の生成（ランダム回転 `Q` と固有値 `D` により `QDQ^T`）
+- `ProjectionRenderer`（存在する場合）
+  - 役割: `PointGeometry3D` から選択軸の 2D 投影画像（ヒートマップ風）を生成
+- `CameraHelper`（存在する場合）
+  - 役割: シーン中心・半径の取得、直交視のカメラ設定
 
-## 拡張性(SharpDX/HelixToolkit観点)
-- 点群の大量描画の最適化
-  - インスタンシング: 同形状ポイントをGPUインスタンシングで描画し、CPU負担を低減。
-  - カラーの圧縮/パレット化:`Color4`をパレット参照にし、メモリ帯域を削減。
-- カスタムシェーダ
-  - HelixToolkit の`EffectsManager`を拡張し、SharpDX の HLSL シェーダを差し替え可能。
-  - サイズ/色を属性ベースで変化させるジオメトリシェーダ、ポストプロセスパスの追加。
-- Compute Shader による生成・投影の高速化
-  - サンプル生成を GPU 側で行う(正規乱数と線形変換)。
-  - 2D投影のビンニング/ラスタ化を Compute Shader で並列化。
-- 直接的な Direct2D/DirectWrite 連携
-  - ラベル、目盛、注釈のベクタ描画を Direct2D で重ね合わせ。
-- マルチスレッド/バックグラウンド生成
-  - 現在は`Task.Run`によるCPU生成。SharpDX の`Device`と協調してレンダリングスレッドの負荷分散を行うことでスムーズなUIを維持。
-- 大規模データ向けLOD/クラスタリング
-  - Octree/グリッドLODにより遠景でポイントを集約表示。
-- 軸・ガイドの強化
-  - 軸ラベル、目盛線、グリッド面、原点マーカーを`LineGeometryModel3D`/カスタムモデルで追加。
+## データモデル設計
+- `ComponentParam`
+  - `Weight: double`
+  - `MeanX/MeanY/MeanZ: double`
+  - `C11/C12/C13/C22/C23/C33: double`（対称行列の上三角）
+  - `SampleCount: int`
+  - `Color: System.Windows.Media.Color`
 
-## UIと描画の詳細
+## UI設計 / バインディング
+- `MainWindow.xaml`
+  - 左: 3D ビュー（`Viewport3DX`）
+    - `DefaultLights`
+    - `PointGeometryModel3D x:Name="ScatterModel"`
+    - 軸 `LineGeometryModel3D`（X/Y/Z）
+    - 壁面 `MeshGeometryModel3D`（XY/XZ/YZ）と表示チェック / 透明度スライダ
+  - 右: パラメータパネル
+    - `DataGrid`（`ItemsSource = _components`）
+    - 入力欄（Point Size, Seed, Total Samples）
+    - 操作ボタン（Generate/Clear/Randomize Seed/Random Covariance/View XY/XZ/YZ）
+    - 投影画像 `Image` ×3（XY/XZ/YZ）
+- バインディングの要点
+  - `DataContext = this` とし、`ScatterModel.Geometry` を直接更新
+  - `Size` はピクセル指定（`new Size(w,h)`）
 
-### 3Dビュー(`MainWindow.xaml`)
--`Viewport3DX`
-  -`PerspectiveCamera`を使用
-  -`DirectionalLight3D`を2つ配置して基本的な照明
-  -`PointGeometryModel3D`(`ScatterModel`): 3D散布図を表示
-    -`Geometry`はコードビハインドから`PointGeometry3D`を割り当て
-    -`Size`は点のピクセルサイズ(WPFの`Size`型で横/縦)
-  - 軸`LineGeometryModel3D`(`AxisXModel`,`AxisYModel`,`AxisZModel`): 原点中心に X/Y/Z 軸を表示
-- 右ペイン
-  - コンポーネント編集用`DataGrid`
-  - シード、トータルサンプル、点サイズなどの入力欄
-  - 操作ボタン: 生成、クリア、ランダムシード、共分散ランダム生成
-  - 2D投影表示:`Image`(`ImgXY`,`ImgXZ`,`ImgYZ`)を`Border`で囲み固定サイズで表示
+## 3D描画設計（HelixToolkit/SharpDX）
+- ビューポート: `Viewport3DX` + `DefaultEffectsManager`
+- 散布図: `PointGeometryModel3D`
+  - `Geometry: PointGeometry3D{Positions: Vector3Collection, Colors: Color4Collection}`
+  - 点サイズ: `ScatterModel.Size`
+- 軸: `LineGeometryModel3D`（`LineBuilder.AddLine` → `ToLineGeometry3D()`）
+- 壁面: `MeshGeometryModel3D`（`MeshBuilder.AddQuad` → `ToMeshGeometry3D()` + `PhongMaterial(DiffuseColor=Color4)`）
+- 更新指針
+  - `Positions/Colors` は一括で新規 `PointGeometry3D` を構築して差し替え（変更通知と GPU 転送が明確）
+  - クリア時は `Positions.Clear(); Colors.Clear(); UpdateBounds()` の順
 
-### コードビハインド(`MainWindow.xaml.cs`)
+## サンプル生成アルゴリズム（GMM）
+- 正規乱数: 極座標版 Box-Muller（Marsaglia Polar）。`[ThreadStatic]` なスペア値で 2個/回を活用
+- 共分散: 入力値から対称行列 `S` を構築し、`TryCholesky3x3(S,out L)` により下三角行列 `L` を求める（SPD 検証）
+- 生成: `mean + L * z`（`z ~ N(0,I)`）を各成分の `SampleCount` 回生成
+- 色: 成分ごとの WPF `Color` を `Color4(R/255,G/255,B/255,A/255)` に変換し、各点に積む
+- 自動配分: `TotalSamples` が指定され、各成分 `SampleCount` が 0 の場合、`Weight` 比で整数配分
 
-#### 初期化
--`EffectsManager`に`DefaultEffectsManager`を設定
--`ScatterGeometry`をデータコンテキストとしてバインドし、`ScatterModel.Geometry`に設定
--`InitializeDefaults()`で2つの初期成分を追加
-- 初期の軸描画`UpdateAxes()`を呼び出し
+## 2D投影レンダリング設計
+- 入力: `PointGeometry3D.Positions/Colors`
+- 軸選択: `('X','Y'), ('X','Z'), ('Y','Z')`
+- スケーリング: 全点の min/max を計算、等方フィットとパディング
+- 描画: `DrawingVisual` に高速矩形描画 → `RenderTargetBitmap` へラスタライズ → `Image.Source` に設定
+- 出力: 固定サイズ（既定 210×210）だが UI で可変に拡張可能
 
-#### サンプル生成(`BtnGenerate_Click`)
-1. 入力検証: 点サイズ、シード、成分重み/サンプル数の妥当性
-2. サンプル数配分: 各成分の`SampleCount`が0なら、`Total Samples`と`Weight`に基づき配分
-3. 生成ロジック:
-   - 各成分について、共分散行列`S`を構築
-   -`TryCholesky3x3(S, out L)`: 共分散が正定値か検証し、下三角行列`L`を求める
-   - 標準正規乱数`z`を生成して、`mean + L * z`で3次元サンプルを作成
-   -`Vector3Collection`に座標、`Color4Collection`に色を追加
-4.`PointGeometry3D`を構築し`ScatterModel.Geometry`に設定、`ScatterModel.Size`に点サイズを反映
-5.`Viewport.ZoomExtents()`で範囲にフィット
-6.`UpdateAxes()`と`UpdateProjections()`を呼び出し
+## カメラ / 軸 / 補助オブジェクト
+- カメラ: 直交ビュー設定 (`CameraHelper.SetCameraToAxisViewOrtho`)
+- 軸: 原点中心に `[-L,L]` の X/Y/Z を作図
+- 壁面: XY/XZ/YZ 半透明クアッド（表示/非表示、透明度スライダ）
 
-#### ランダム共分散生成(`BtnRandomCov_Click`)
-- 目的: ガウス分布を「偏らせる」ため、異方性の強い正定値対称行列を各成分に付与
-- アルゴリズム:
-  1. ランダム回転行列`Q`を Gram-Schmidt で生成
-  2. 固有値を`minEigen`〜`maxEigen`の広い範囲から二峰性バイアスでサンプリング(小さい/大きい値に寄せる)
-  3. 対角行列`D`を作り、`S = Q D Q^T`で共分散行列を生成
-  4. 数値誤差対策で対称化
-- 生成された`S`の要素を`C11..C33`に割り当て、`DataGrid`を`Items.Refresh()`で更新
+## エラーハンドリング / 入力検証
+- 生成前
+  - `Point Size > 0`、`Seed` 整数
+  - `Weight > 0` の成分が存在
+  - 自動配分時の `TotalSamples > 0`、重み合計 > 0
+  - 共分散 SPD 検証に失敗したら例外表示
+- 例外
+  - `try/catch` で `MessageBox.Show`、UI を `SetBusy(false)` で復旧
 
-#### 軸描画(`UpdateAxes`)
-- 現在の点群の座標範囲からスケール`L`を計算
--`LineBuilder`を用いて`[-L, L]`の X/Y/Z 軸線を作成し、各`Axis*Model.Geometry`に設定
+## パフォーマンス設計 / チューニング
+- 描画
+  - `PointGeometryModel3D` はビルボード点で最速（大量点でも安定）
+  - `Geometry` の更新は一括置換で GPU 転送を最小化
+- 生成
+  - `Task.Run` で UI スレッドを塞がない
+  - 正規乱数のキャッシュ `_spare` を使用
+- 補助
+  - 軸長は点群範囲から算出し、余分な再生成を抑制
+- 将来の最適化
+  - LOD/クラスタリング、投影のバケット化/並列化、Compute Shader 移行
 
-#### 2D投影生成(`UpdateProjections`/`RenderProjection`)
-- 入力: 3D点群の`Positions`と`Colors`
-- 軸選択:`'X','Y'`、`'X','Z'`、`'Y','Z'`
-- スケーリング:
-  - 各軸の最小/最大から等方スケールとパディングを計算
-  - 固定サイズ(デフォルト 210×210)のキャンバスに等方フィット
-- 描画:
-  -`DrawingVisual`に対して点を高速矩形で描画
-  -`RenderTargetBitmap`でラスタライズし`Image.Source`に設定
+## セットアップ / ビルド / 実行手順
+1. リポジトリをクローン
+2. Visual Studio でソリューションを開く
+3. NuGet パッケージを復元（HelixToolkit.Wpf.SharpDX / SharpDX）
+4. ビルド（Ctrl+Shift+B）
+5. 実行（F5）
+6. 右ペインで `Point Size` と `Seed` を指定 → `Generate`
 
-#### 乱数生成(`NextStandardNormal`)
-- Box-Muller 法(極座標版)を使用
--`[ThreadStatic]`な予備値(`_spare`)を活用して1回の計算で2標準正規を生成(性能最適化)
+## トラブルシューティング
+- 何も表示されない
+  - `ScatterModel.Geometry` に `Positions` が入っているか、`DefaultLights` があるか、`EffectsManager` 設定済みか
+- 点サイズが変わらない
+  - `ScatterModel.Size` を更新しているか（ピクセル指定）
+- 色が反映されない
+  - `Colors` の `Color4` を 0-1 範囲に正規化
+- 共分散エラー
+  - SPD 条件（主座小行列 > 0）を満たす値か再確認
+- クラス図が関係を表示しない
+  - Class Designer の「Show Associations/Inheritances」有効化、図へクラス追加、再レイアウト
 
-#### 線形代数補助
--`TryCholesky3x3`: 3x3 対称正定値行列の下三角分解(失敗時はエラー文字列を返す)
-- ランダムSPD生成用の 3Dベクトル演算(`Dot`,`Cross`,`Normalize`,`Multiply`,`Transpose`)
+## 拡張設計（ロードマップ）
+- 2D投影の対話化（パン/ズーム）
+- 軸ラベル/目盛（ビルボードテキスト/Direct2D）
+- ボリューム可視化（IsoSurface/Volume Rendering）
+- シーンスナップショット/動画出力
+- .NET 6/8 版への移行と HelixToolkit 対応確認
 
-## データモデル(`Models/ComponentParam.cs`について)
-- プロパティ例:
-  -`double Weight`(混合重み)
-  -`double MeanX, MeanY, MeanZ`(平均)
-  -`double C11, C12, C13, C22, C23, C33`(対称共分散要素)
-  -`int SampleCount`(生成サンプル数)
-  -`System.Windows.Media.Color Color`(色)
--`DataGrid`は上記プロパティにバインドして編集可能
+## ライブラリ API メモ
+- `PointGeometryModel3D`
+  - `Geometry: PointGeometry3D`
+  - `Size: System.Windows.Size`（ピクセル）
+  - `Color: System.Windows.Media.Color`（単色時）
+- `PointGeometry3D`
+  - `Positions: Vector3Collection`
+  - `Colors: Color4Collection`
+- `LineBuilder`
+  - `AddLine(Vector3 a, Vector3 b)` → `ToLineGeometry3D()`
+- `MeshBuilder`
+  - `AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d)` → `ToMeshGeometry3D()`
+- `DefaultEffectsManager`
+  - HelixToolkit のパイプライン/マテリアル管理の既定実装
 
-## 処理フロー
-1. 初期起動: デフォルト成分をセット、空の点群を表示、軸を描画
-2. ユーザ操作:
-   - 成分追加/削除、共分散の編集
-   - シード指定・ランダム化
-   - ランダム共分散生成で異方性付与
-   - サンプル生成・描画で3D表示更新、2D投影更新
-   - クリアで点群・投影を消去、軸リサイズ
+## ライセンス / 注意
+- HelixToolkit / SharpDX のライセンスに従います
+- .NET Framework 前提。WPF .NET 6/8 へ移行時は互換 API とパッケージを確認
 
-## エラーハンドリング
-- 入力検証で不正値を`MessageBox`により通知
-- 正定値でない共分散は`TryCholesky3x3`が検知し例外メッセージ表示
+## 参考リンク
+- HelixToolkit.Wpf.SharpDX: https://github.com/helix-toolkit/helix-toolkit
+- ドキュメント/サンプル: https://helix-toolkit.github.io/
 
-## 拡張ポイント
-- 2D投影のサイズ/点サイズの係数を UI で調整可能にする
-- 軸ラベル/目盛の追加(現状線のみ)
-- 3Dボリューム(密度の体積可視化)は未実装スロットあり(`BtnGenVol_Click`など)
-- GMM の確率密度計算と等高線/ヒートマップの 2D 表示
-
-## ビルドと実行
-- 依存: HelixToolkit.Wpf.SharpDX(NuGet)
-- Visual Studio でソリューションを開き、`MultiDimensionwScatter`を起動
-
-## 注意事項
-- 本プロジェクトは .NET Framework 4.6.2 に依存します(C# 7.3)。
-- HelixToolkit のバージョンにより API/挙動が異なる場合があります。`DefaultEffectsManager`と`Viewport3DX`の互換性に留意してください。
+以上により、HelixToolkit.Wpf.SharpDX 初学者でもソリューションの全体像・内部設計・動作原理を把握し、再現・拡張できるように構成しています。
