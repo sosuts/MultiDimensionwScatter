@@ -1,0 +1,32 @@
+name: Build Release on Push
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore MultiDimensionwScatter/MultiDimensionwScatter.sln
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build solution (Release)
+        run: msbuild MultiDimensionwScatter/MultiDimensionwScatter.sln /t:Build /p:Configuration=Release /p:Platform="Any CPU"
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+            name: Release-Binaries
+            path: |
+              MultiDimensionwScatter/**/bin/Release/
