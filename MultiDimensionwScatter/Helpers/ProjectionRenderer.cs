@@ -10,7 +10,7 @@ namespace MultiDimensionwScatter.Helpers
 {
     public static class ProjectionRenderer
     {
-        public static void RenderProjection(PointGeometry3D geom, char axisU, char axisV, System.Windows.Controls.Image target, int pixelW, int pixelH, Size pointSize)
+        public static void RenderProjection(PointGeometry3D geom, char axisU, char axisV, System.Windows.Controls.Image target, int pixelW, int pixelH, Size pointSize, Color4? fallbackColor)
         {
             if (target == null)
             {
@@ -80,7 +80,20 @@ namespace MultiDimensionwScatter.Helpers
                     if (colors != null && colors.Count == positions.Count)
                     {
                         var c4 = colors[i];
-                        col = System.Windows.Media.Color.FromScRgb(c4.Alpha, c4.Red, c4.Green, c4.Blue);
+                        byte a = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Alpha)) * 255.0);
+                        byte r8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Red)) * 255.0);
+                        byte g8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Green)) * 255.0);
+                        byte b8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Blue)) * 255.0);
+                        col = System.Windows.Media.Color.FromArgb(a, r8, g8, b8);
+                    }
+                    else if (fallbackColor.HasValue)
+                    {
+                        var fc = fallbackColor.Value;
+                        byte a = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Alpha)) * 255.0);
+                        byte r8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Red)) * 255.0);
+                        byte g8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Green)) * 255.0);
+                        byte b8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Blue)) * 255.0);
+                        col = System.Windows.Media.Color.FromArgb(a, r8, g8, b8);
                     }
                     else
                     {

@@ -44,11 +44,12 @@
                                          Color="DodgerBlue"
                                          Thickness="1.0" />
 
+                <!-- モデルカラーは白にしておく -->
                 <sdx:PointGeometryModel3D x:Name="ScatterModel"
                                           Geometry="{Binding ScatterGeometry}"
                                           Size="1.5 1.5"
                                           Figure="Ellipse"
-                                          Color="DodgerBlue" />
+                                          Color="White" />
                 <sdx:DirectionalLight3D Direction="-1,-1,-1"
                                         Color="White" />
             </sdx:Viewport3DX>

@@ -181,7 +181,9 @@ namespace MultiDimensionwScatter
                         double l00 = L[0, 0], l01 = L[0, 1], l02 = L[0, 2];
                         double l10 = L[1, 0], l11 = L[1, 1], l12 = L[1, 2];
                         double l20 = L[2, 0], l21 = L[2, 1], l22 = L[2, 2];
-                        var color = new Color4(comp.Color.ScR, comp.Color.ScG, comp.Color.ScB, comp.Color.ScA);
+                        // Convert WPF Color (sRGB) to Color4 using 0-255 channels
+                        var wc = comp.Color;
+                        var color = new Color4(wc.R / 255f, wc.G / 255f, wc.B / 255f, wc.A / 255f);
 
                         for (int i = 0; i < n; i++)
                         {
@@ -346,9 +348,13 @@ namespace MultiDimensionwScatter
             const int w = 210;
             const int h = 210;
 
-            ProjectionRenderer.RenderProjection(geom, 'X', 'Y', ImgXY, w, h, ScatterModel.Size);
-            ProjectionRenderer.RenderProjection(geom, 'X', 'Z', ImgXZ, w, h, ScatterModel.Size);
-            ProjectionRenderer.RenderProjection(geom, 'Y', 'Z', ImgYZ, w, h, ScatterModel.Size);
+            // Convert ScatterModel.Color (sRGB) to Color4 using 0-255 channels
+            var c = ScatterModel.Color;
+            var fallback = new Color4(c.R / 255f, c.G / 255f, c.B / 255f, c.A / 255f);
+
+            ProjectionRenderer.RenderProjection(geom, 'X', 'Y', ImgXY, w, h, ScatterModel.Size, fallback);
+            ProjectionRenderer.RenderProjection(geom, 'X', 'Z', ImgXZ, w, h, ScatterModel.Size, fallback);
+            ProjectionRenderer.RenderProjection(geom, 'Y', 'Z', ImgYZ, w, h, ScatterModel.Size, fallback);
         }
 
         private void ClearProjections()
