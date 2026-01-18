@@ -8,6 +8,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MultiDimensionwScatter.Helpers;
 
 namespace MultiDimensionwScatter
 {
@@ -342,16 +343,12 @@ namespace MultiDimensionwScatter
                 return;
             }
 
-            var positions = geom.Positions;
-            var colors = geom.Colors;
-
-            // 投影サイズ（XAMLのBorderに合わせる）
             const int w = 210;
             const int h = 210;
 
-            RenderProjection(positions, colors, 'X', 'Y', ImgXY, w, h);
-            RenderProjection(positions, colors, 'X', 'Z', ImgXZ, w, h);
-            RenderProjection(positions, colors, 'Y', 'Z', ImgYZ, w, h);
+            ProjectionRenderer.RenderProjection(geom, 'X', 'Y', ImgXY, w, h, ScatterModel.Size);
+            ProjectionRenderer.RenderProjection(geom, 'X', 'Z', ImgXZ, w, h, ScatterModel.Size);
+            ProjectionRenderer.RenderProjection(geom, 'Y', 'Z', ImgYZ, w, h, ScatterModel.Size);
         }
 
         private void ClearProjections()
@@ -361,115 +358,19 @@ namespace MultiDimensionwScatter
             if (ImgYZ != null) ImgYZ.Source = null;
         }
 
-        private void RenderProjection(Vector3Collection positions, Color4Collection colors, char axisU, char axisV, System.Windows.Controls.Image target, int pixelW, int pixelH)
-        {
-            if (target == null) return;
-            if (positions == null || positions.Count == 0)
-            {
-                target.Source = null;
-                return;
-            }
-
-            double GetComp(Vector3 v, char axis)
-            {
-                switch (axis)
-                {
-                    case 'X': return v.X;
-                    case 'Y': return v.Y;
-                    case 'Z': return v.Z;
-                    default: return 0.0;
-                }
-            }
-
-            double minU = double.PositiveInfinity, maxU = double.NegativeInfinity;
-            double minV = double.PositiveInfinity, maxV = double.NegativeInfinity;
-            for (int i = 0; i < positions.Count; i++)
-            {
-                var p = positions[i];
-                double u = GetComp(p, axisU);
-                double v = GetComp(p, axisV);
-                if (u < minU) minU = u; if (u > maxU) maxU = u;
-                if (v < minV) minV = v; if (v > maxV) maxV = v;
-            }
-            if (!(maxU > minU) || !(maxV > minV))
-            {
-                // 退避: 範囲がゼロに近い場合
-                double centerU = (double)GetComp(positions[0], axisU);
-                double centerV = (double)GetComp(positions[0], axisV);
-                double delta = 1.0;
-                minU = centerU - delta; maxU = centerU + delta;
-                minV = centerV - delta; maxV = centerV + delta;
-            }
-
-            const double pad = 8.0;
-            double scaleU = (pixelW - 2 * pad) / (maxU - minU);
-            double scaleV = (pixelH - 2 * pad) / (maxV - minV);
-            double scale = Math.Min(scaleU, scaleV);
-            double offsetX = pad + (pixelW - 2 * pad - (maxU - minU) * scale) * 0.5;
-            double offsetY = pad + (pixelH - 2 * pad - (maxV - minV) * scale) * 0.5;
-
-            // 2D点サイズ（3DのSizeから適当にスケール）
-            double r = Math.Max(1.0, ScatterModel.Size.Width * 0.6);
-
-            var dv = new DrawingVisual();
-            using (var dc = dv.RenderOpen())
-            {
-                // 背景
-                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, pixelW, pixelH));
-
-                // ポイント描画
-                var brushCache = new Dictionary<System.Windows.Media.Color, SolidColorBrush>();
-                for (int i = 0; i < positions.Count; i++)
-                {
-                    var p = positions[i];
-                    double u = GetComp(p, axisU);
-                    double v = GetComp(p, axisV);
-                    double x = (u - minU) * scale + offsetX;
-                    double y = pixelH - ((v - minV) * scale + offsetY); // y上向きを上に
-
-                    System.Windows.Media.Color col;
-                    if (colors != null && colors.Count == positions.Count)
-                    {
-                        var c4 = colors[i];
-                        col = System.Windows.Media.Color.FromScRgb(c4.Alpha, c4.Red, c4.Green, c4.Blue);
-                    }
-                    else
-                    {
-                        col = System.Windows.Media.Colors.DodgerBlue;
-                    }
-
-                    if (!brushCache.TryGetValue(col, out var brush))
-                    {
-                        brush = new SolidColorBrush(col);
-                        brush.Freeze();
-                        brushCache[col] = brush;
-                    }
-
-                    // 小さな矩形で高速描画
-                    dc.DrawRectangle(brush, null, new Rect(x - r * 0.5, y - r * 0.5, Math.Max(1.0, r), Math.Max(1.0, r)));
-                }
-            }
-            var rtb = new RenderTargetBitmap(pixelW, pixelH, 96, 96, PixelFormats.Pbgra32);
-            rtb.Render(dv);
-            target.Source = rtb;
-        }
-
         private void BtnRandomCov_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // 可能ならSeedを利用、なければ時間ベース
                 int seed;
                 var rng = int.TryParse(TxtSeed.Text, out seed) ? new Random(seed) : new Random(Environment.TickCount);
 
-                // 偏りを強めるための固有値レンジ（大きく異なるスケールを持つ）
-                // 例: [0.05, 0.3, 1.5] をベースにランダム比
                 foreach (var c in _components)
                 {
-                    var S = GenerateRandomSPD3(rng,
-                        minEigen: 0.02,   // 最小固有値（大きくしすぎると丸くなる）
-                        maxEigen: 2.5,    // 最大固有値（大きいほど細長くなる）
-                        anisotropyBias: 0.6); // 異方性を促進するバイアス
+                    var S = CovarianceGenerator.GenerateRandomSPD3(rng,
+                        minEigen: 0.02,
+                        maxEigen: 2.5,
+                        anisotropyBias: 0.6);
 
                     c.C11 = S[0, 0];
                     c.C12 = S[0, 1];
@@ -479,9 +380,7 @@ namespace MultiDimensionwScatter
                     c.C33 = S[2, 2];
                 }
 
-                // UIを反映
                 GridComponents.Items.Refresh();
-
                 MessageBox.Show("各成分の共分散をランダムに更新しました（正定値・異方性あり）。", "完了", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -490,277 +389,44 @@ namespace MultiDimensionwScatter
             }
         }
 
-        // ランダムな正定値3x3行列を生成（強い偏りをもたせる）
-        private static double[,] GenerateRandomSPD3(Random rng, double minEigen, double maxEigen, double anisotropyBias)
-        {
-            // 1) ランダム直交行列（回転）Qを生成：ランダムベクトルからGram-Schmidt
-            var a = RandomVector(rng);
-            var b = RandomVector(rng);
-            var c = Cross(a, b);
-
-            // 正規直交化
-            Normalize(ref a);
-            // bからa成分を除去して正規化
-            var bProj = Sub(b, Scale(a, Dot(a, b)));
-            Normalize(ref bProj);
-            // cを再計算して直交基底に
-            c = Cross(a, bProj);
-            Normalize(ref c);
-            var Q = new double[,]
-            {
-                { a.X, bProj.X, c.X },
-                { a.Y, bProj.Y, c.Y },
-                { a.Z, bProj.Z, c.Z }
-            };
-
-            // 2) 固有値をランダム生成（異方性強調）
-            // 大小の差が出やすいように指数的レンジを使用
-            double e1 = SampleEigen(rng, minEigen, maxEigen, anisotropyBias);
-            double e2 = SampleEigen(rng, minEigen, maxEigen, anisotropyBias);
-            double e3 = SampleEigen(rng, minEigen, maxEigen, anisotropyBias);
-            // 小さい順に並べ替え（安定化)
-            var evals = new[] { e1, e2, e3 }.OrderBy(x => x).ToArray();
-            var D = new double[,] { { evals[0], 0, 0 }, { 0, evals[1], 0 }, { 0, 0, evals[2] } };
-
-            // 3) S = Q D Q^T
-            var S = Multiply(Multiply(Q, D), Transpose(Q));
-
-            // 対称化（数値誤差対策）
-            S[0, 1] = S[1, 0] = 0.5 * (S[0, 1] + S[1, 0]);
-            S[0, 2] = S[2, 0] = 0.5 * (S[0, 2] + S[2, 0]);
-            S[1, 2] = S[2, 1] = 0.5 * (S[1, 2] + S[2, 1]);
-
-            return S;
-        }
-
-        private static double SampleEigen(Random rng, double minEigen, double maxEigen, double bias)
-        {
-            // [0,1) からバイアス付き乱数。bias>0で小さい値または大きい値に寄せる。
-            // ここでは広がりを大きくするため、二峰性にする。
-            double u = rng.NextDouble();
-            double t;
-            if (rng.NextDouble() < 0.5)
-            {
-                // 小さい固有値側に寄せる
-                t = Math.Pow(u, 1.0 + bias * 2.0);
-            }
-            else
-            {
-                // 大きい固有値側に寄せる
-                t = 1.0 - Math.Pow(1.0 - u, 1.0 + bias * 2.0);
-            }
-            return minEigen + (maxEigen - minEigen) * t;
-        }
-
-        // 3Dベクトル・行列ユーティリティ（double）
-        private struct V3
-        {
-            public double X, Y, Z;
-            public V3(double x, double y, double z) { X = x; Y = y; Z = z; }
-        }
-        private static V3 RandomVector(Random rng)
-        {
-            return new V3(rng.NextDouble() * 2 - 1, rng.NextDouble() * 2 - 1, rng.NextDouble() * 2 - 1);
-        }
-        private static void Normalize(ref V3 v)
-        {
-            double n = Math.Sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z);
-            if (n <= 1e-12)
-            {
-                v = new V3(1, 0, 0);
-                return;
-            }
-            v = new V3(v.X / n, v.Y / n, v.Z / n);
-        }
-        private static V3 Cross(V3 a, V3 b)
-        {
-            return new V3(a.Y * b.Z - a.Z * b.Y, a.Z * b.X - a.X * b.Z, a.X * b.Y - a.Y * b.X);
-        }
-        private static double Dot(V3 a, V3 b)
-        {
-            return a.X * b.X + a.Y * b.Y + a.Z * b.Z;
-        }
-        private static V3 Scale(V3 a, double s) => new V3(a.X * s, a.Y * s, a.Z * s);
-        private static V3 Sub(V3 a, V3 b) => new V3(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
-
-        private static double[,] Multiply(double[,] A, double[,] B)
-        {
-            var r = new double[3, 3];
-            for (int i = 0; i < 3; i++)
-            {
-                for (int j = 0; j < 3; j++)
-                {
-                    double sum = 0;
-                    for (int k = 0; k < 3; k++)
-                        sum += A[i, k] * B[k, j];
-                    r[i, j] = sum;
-                }
-            }
-            return r;
-        }
-        private static double[,] Transpose(double[,] A)
-        {
-            return new double[,]
-            {
-                { A[0,0], A[1,0], A[2,0] },
-                { A[0,1], A[1,1], A[2,1] },
-                { A[0,2], A[1,2], A[2,2] },
-            };
-        }
-
-        // カメラ視点切替ボタンのハンドラ
         private void BtnViewXY_Click(object sender, RoutedEventArgs e)
         {
-            // XY投影: U=X(水平), V=Y(垂直)。Z方向から見る。Upは+Y
-            SetCameraToAxisViewOrtho('X', 'Y', new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+            var geom = ScatterModel.Geometry as PointGeometry3D ?? _scatterGeometry;
+            CameraHelper.SetCameraToAxisViewOrtho(Viewport, geom, 'X', 'Y', new Vector3(0, 0, -1), new Vector3(0, 1, 0));
         }
 
         private void BtnViewXZ_Click(object sender, RoutedEventArgs e)
         {
-            // XZ投影: U=X(水平), V=Z(垂直)。Y方向から見る。Upは+Z
-            SetCameraToAxisViewOrtho('X', 'Z', new Vector3(0, 1, 0), new Vector3(0, 0, 1));
+            var geom = ScatterModel.Geometry as PointGeometry3D ?? _scatterGeometry;
+            CameraHelper.SetCameraToAxisViewOrtho(Viewport, geom, 'X', 'Z', new Vector3(0, 1, 0), new Vector3(0, 0, 1));
         }
 
         private void BtnViewYZ_Click(object sender, RoutedEventArgs e)
         {
-            // YZ投影: U=Y(水平), V=Z(垂直)。X方向から見る。Upは+Z
-            SetCameraToAxisViewOrtho('Y', 'Z', new Vector3(-1, 0, 0), new Vector3(0, 0, 1));
-        }
-
-        private void SetCameraToAxisViewOrtho(char axisU, char axisV, Vector3 lookDirUnit, Vector3 upDirUnit)
-        {
-            try
-            {
-                GetSceneCenterAndRadius(out var center, out float radius);
-                float distance = Math.Max(5f, radius * 2.5f);
-
-                var geom = ScatterModel.Geometry as PointGeometry3D ?? _scatterGeometry;
-                double GetComp(Vector3 v, char axis)
-                {
-                    switch (axis)
-                    {
-                        case 'X': return v.X;
-                        case 'Y': return v.Y;
-                        case 'Z': return v.Z;
-                        default: return 0.0;
-                    }
-                }
-
-                double minU = double.PositiveInfinity, maxU = double.NegativeInfinity;
-                double minV = double.PositiveInfinity, maxV = double.NegativeInfinity;
-
-                if (geom?.Positions != null && geom.Positions.Count > 0)
-                {
-                    for (int i = 0; i < geom.Positions.Count; i++)
-                    {
-                        var p = geom.Positions[i];
-                        double u = GetComp(p, axisU);
-                        double v = GetComp(p, axisV);
-                        if (u < minU) minU = u; if (u > maxU) maxU = u;
-                        if (v < minV) minV = v; if (v > maxV) maxV = v;
-                    }
-                }
-                else
-                {
-                    minU = -5; maxU = 5;
-                    minV = -5; maxV = 5;
-                }
-
-                if (!(maxU > minU)) { var c = (minU + maxU) * 0.5; minU = c - 1; maxU = c + 1; }
-                if (!(maxV > minV)) { var c = (minV + maxV) * 0.5; minV = c - 1; maxV = c + 1; }
-                double rangeU = maxU - minU;
-                double rangeV = maxV - minV;
-                double width = Math.Max(rangeU, rangeV) * 1.05;
-
-                var look = new System.Windows.Media.Media3D.Vector3D(lookDirUnit.X, lookDirUnit.Y, lookDirUnit.Z);
-                var up = new System.Windows.Media.Media3D.Vector3D(upDirUnit.X, upDirUnit.Y, upDirUnit.Z);
-                var c3 = new System.Windows.Media.Media3D.Point3D(center.X, center.Y, center.Z);
-                var pos = new System.Windows.Media.Media3D.Point3D(
-                    c3.X - look.X * distance,
-                    c3.Y - look.Y * distance,
-                    c3.Z - look.Z * distance);
-
-                // HelixToolkit の OrthographicCamera を使用することが重要
-                var cam = new HelixToolkit.Wpf.SharpDX.OrthographicCamera
-                {
-                    Position = pos,
-                    LookDirection = new System.Windows.Media.Media3D.Vector3D(look.X * distance, look.Y * distance, look.Z * distance),
-                    UpDirection = up,
-                    Width = width
-                };
-
-                Viewport.Camera = cam;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"カメラ設定エラー: {ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        // シーンの中心点と概算半径を求める
-        private void GetSceneCenterAndRadius(out Vector3 center, out float radius)
-        {
             var geom = ScatterModel.Geometry as PointGeometry3D ?? _scatterGeometry;
-            if (geom?.Positions != null && geom.Positions.Count > 0)
-            {
-                float minX = geom.Positions.Min(p => p.X);
-                float maxX = geom.Positions.Max(p => p.X);
-                float minY = geom.Positions.Min(p => p.Y);
-                float maxY = geom.Positions.Max(p => p.Y);
-                float minZ = geom.Positions.Min(p => p.Z);
-                float maxZ = geom.Positions.Max(p => p.Z);
-
-                center = new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f);
-
-                var dx = maxX - minX;
-                var dy = maxY - minY;
-                var dz = maxZ - minZ;
-                radius = (float)Math.Max(Math.Max(dx, dy), dz) * 0.5f;
-            }
-            else
-            {
-                // データがない場合は原点・既定半径
-                center = new Vector3(0, 0, 0);
-                radius = 5f;
-            }
+            CameraHelper.SetCameraToAxisViewOrtho(Viewport, geom, 'Y', 'Z', new Vector3(-1, 0, 0), new Vector3(0, 0, 1));
         }
 
         private void BtnRandomMean_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // 可能ならSeedを利用、なければ時間ベース
                 int seed;
                 var rng = int.TryParse(TxtSeed.Text, out seed) ? new Random(seed) : new Random(Environment.TickCount);
 
-                // 現在のシーンの中心と半径（既存点群があればそれを使用）
-                GetSceneCenterAndRadius(out var center, out float radius);
-
-                // ランダム化のスケールを決定
-                // - 既存点群がない場合: 既定半径を使用
-                // - 既存平均がある場合は、その分布スケールに合わせる
+                CameraHelper.GetSceneCenterAndRadius(ScatterModel.Geometry as PointGeometry3D ?? _scatterGeometry, out var center, out float radius);
                 double baseScale = Math.Max(1.0, radius);
 
-                // 各成分の平均を適度にランダム化
-                // 方向は一様球面、距離は0〜baseScale*0.6程度
                 foreach (var c in _components)
                 {
                     var offset = RandomDirection(rng);
-                    double dist = (rng.NextDouble()) * (baseScale * 0.6); // 最大距離
-                    double dx = offset.X * dist;
-                    double dy = offset.Y * dist;
-                    double dz = offset.Z * dist;
-
-                    // 既存平均を中心寄せするか、シーン中心からのオフセットかを選択
-                    // ここでは「現在の平均を基準に少し動かす」方が直感的
-                    c.MeanX = c.MeanX + dx;
-                    c.MeanY = c.MeanY + dy;
-                    c.MeanZ = c.MeanZ + dz;
+                    double dist = (rng.NextDouble()) * (baseScale * 0.6);
+                    c.MeanX = c.MeanX + offset.X * dist;
+                    c.MeanY = c.MeanY + offset.Y * dist;
+                    c.MeanZ = c.MeanZ + offset.Z * dist;
                 }
 
-                // UI反映
                 GridComponents.Items.Refresh();
-
                 MessageBox.Show("各成分の平均をランダムに更新しました。", "完了", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -769,11 +435,10 @@ namespace MultiDimensionwScatter
             }
         }
 
-        // 一様球面方向ベクトル（double）を生成
+        private struct V3 { public double X, Y, Z; public V3(double x, double y, double z) { X = x; Y = y; Z = z; } }
         private static V3 RandomDirection(Random rng)
         {
-            // cos(theta) を[-1,1]一様、phi を[0,2π)一様
-            double u = rng.NextDouble() * 2.0 - 1.0; // cos(theta)
+            double u = rng.NextDouble() * 2.0 - 1.0;
             double phi = rng.NextDouble() * 2.0 * Math.PI;
             double s = Math.Sqrt(Math.Max(0.0, 1.0 - u * u));
             return new V3(s * Math.Cos(phi), s * Math.Sin(phi), u);

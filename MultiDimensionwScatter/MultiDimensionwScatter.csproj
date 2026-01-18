@@ -115,6 +115,9 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Helpers\CameraHelper.cs" />
+    <Compile Include="Helpers\CovarianceGenerator.cs" />
+    <Compile Include="Helpers\ProjectionRenderer.cs" />
     <Compile Include="Models\ComponentParam.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
