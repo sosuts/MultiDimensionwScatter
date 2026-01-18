@@ -1,14 +1,13 @@
 ﻿using HelixToolkit.Wpf.SharpDX;
+using MultiDimensionwScatter.Helpers;
 using MultiDimensionwScatter.Models;
 using SharpDX;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using MultiDimensionwScatter.Helpers;
+using System.Windows.Media.Media3D;
 
 namespace MultiDimensionwScatter
 {
@@ -305,6 +304,9 @@ namespace MultiDimensionwScatter
 
         // ==== 追加: 軸描画と2D投影 ====
 
+        // Cached alpha for planes
+        private float _planeAlpha = 0.35f;
+
         private void UpdateAxes()
         {
             // 現在の幾何からスケールを算出し、原点中心の対称軸を描く
@@ -318,15 +320,69 @@ namespace MultiDimensionwScatter
                 float maxY = geom.Positions.Max(p => p.Y);
                 float minZ = geom.Positions.Min(p => p.Z);
                 float maxZ = geom.Positions.Max(p => p.Z);
+
                 L = Math.Max(Math.Max(Math.Abs(minX), Math.Abs(maxX)),
                     Math.Max(Math.Max(Math.Abs(minY), Math.Abs(maxY)), Math.Max(Math.Abs(minZ), Math.Abs(maxZ))));
                 if (L <= 0) L = 5f;
                 L *= 1.1f; // 少し余白
+
+                // MeshGeometryModel3D の壁を更新
+                BuildWalls(minX, maxX, minY, maxY, minZ, maxZ);
             }
 
             AxisXModel.Geometry = BuildLine(new Vector3(-L, 0, 0), new Vector3(L, 0, 0));
             AxisYModel.Geometry = BuildLine(new Vector3(0, -L, 0), new Vector3(0, L, 0));
             AxisZModel.Geometry = BuildLine(new Vector3(0, 0, -L), new Vector3(0, 0, L));
+        }
+
+        // 壁の色とアルファを簡単指定するヘルパー
+        private static HelixToolkit.Wpf.SharpDX.PhongMaterial CreateWallMaterial(System.Windows.Media.Color rgb, float alpha)
+        {
+            // sRGB (byte) -> Color4
+            var c4 = new Color4(rgb.R / 255f, rgb.G / 255f, rgb.B / 255f, alpha);
+            return new HelixToolkit.Wpf.SharpDX.PhongMaterial
+            {
+                DiffuseColor = c4,
+                // Ambient/Specularは省略可能。必要なら下記を有効化:
+                // AmbientColor = c4,
+                // SpecularColor = new Color4(0,0,0,0),
+            };
+        }
+
+        private void BuildWalls(float minX, float maxX, float minY, float maxY, float minZ, float maxZ)
+        {
+            float xMax = Math.Max(0, maxX);
+            float yMax = Math.Max(0, maxY);
+            float zMax = Math.Max(0, maxZ);
+
+            bool showYZ = (ChkPlaneYZ?.IsChecked ?? true) == true; // X=0
+            bool showXZ = (ChkPlaneXZ?.IsChecked ?? true) == true; // Y=0
+            bool showXY = (ChkPlaneXY?.IsChecked ?? true) == true; // Z=0
+
+            // ここで壁色を「RGBで」簡単指定
+            var matX = CreateWallMaterial(Colors.Red, showYZ ? _planeAlpha : 0f); // YZ
+            var matY = CreateWallMaterial(Colors.Green, showXZ ? _planeAlpha : 0f); // XZ
+            var matZ = CreateWallMaterial(Colors.Blue, showXY ? _planeAlpha : 0f); // XY
+
+            const float eps = 0.001f;
+            WallXModel.Geometry = CreateQuadMesh(new Point3D(eps, 0, 0), new Point3D(eps, yMax, 0), new Point3D(eps, yMax, zMax), new Point3D(eps, 0, zMax));
+            WallXModel.Material = matX;
+
+            WallYModel.Geometry = CreateQuadMesh(new Point3D(0, eps, 0), new Point3D(xMax, eps, 0), new Point3D(xMax, eps, zMax), new Point3D(0, eps, zMax));
+            WallYModel.Material = matY;
+
+            WallZModel.Geometry = CreateQuadMesh(new Point3D(0, 0, eps), new Point3D(xMax, 0, eps), new Point3D(xMax, yMax, eps), new Point3D(0, yMax, eps));
+            WallZModel.Material = matZ;
+        }
+
+        private static HelixToolkit.Wpf.SharpDX.MeshGeometry3D CreateQuadMesh(Point3D p0, Point3D p1, Point3D p2, Point3D p3)
+        {
+            var mb = new HelixToolkit.Wpf.SharpDX.MeshBuilder();
+            mb.AddQuad(new Vector3((float)p0.X, (float)p0.Y, (float)p0.Z),
+                       new Vector3((float)p1.X, (float)p1.Y, (float)p1.Z),
+                       new Vector3((float)p2.X, (float)p2.Y, (float)p2.Z),
+                       new Vector3((float)p3.X, (float)p3.Y, (float)p3.Z));
+            return mb.ToMeshGeometry3D();
         }
 
         private static LineGeometry3D BuildLine(Vector3 p1, Vector3 p2)
@@ -448,6 +504,17 @@ namespace MultiDimensionwScatter
             double phi = rng.NextDouble() * 2.0 * Math.PI;
             double s = Math.Sqrt(Math.Max(0.0, 1.0 - u * u));
             return new V3(s * Math.Cos(phi), s * Math.Sin(phi), u);
+        }
+
+        // UI handlers to adjust visibility/opacity
+        private void ChkPlane_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            UpdateAxes();
+        }
+        private void SldPlaneOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            _planeAlpha = (float)Math.Max(0.0, Math.Min(1.0, e.NewValue));
+            UpdateAxes();
         }
     }
 }

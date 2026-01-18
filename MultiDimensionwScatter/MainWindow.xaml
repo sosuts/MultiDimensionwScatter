@@ -14,10 +14,8 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="700" />
         </Grid.ColumnDefinitions>
-        <!-- Plot Area (SharpDX) -->
         <Grid Grid.Column="0"
               Background="White">
-
             <sdx:Viewport3DX x:Name="Viewport"
                              ShowCoordinateSystem="True"
                              ShowViewCube="True"
@@ -29,11 +27,8 @@
                                            UpDirection="0,1,0"
                                            FieldOfView="60" />
                 </sdx:Viewport3DX.Camera>
-
                 <sdx:DirectionalLight3D Direction="-1,-1,-1"
                                         Color="White" />
-
-                <!-- Axes -->
                 <sdx:LineGeometryModel3D x:Name="AxisXModel"
                                          Color="Red"
                                          Thickness="1.0" />
@@ -43,8 +38,18 @@
                 <sdx:LineGeometryModel3D x:Name="AxisZModel"
                                          Color="DodgerBlue"
                                          Thickness="1.0" />
-
-                <!-- モデルカラーは白にしておく -->
+                <sdx:MeshGeometryModel3D x:Name="WallXModel"
+                                         IsTransparent="True"
+                                         RenderOrder="0"
+                                         CullMode="None" />
+                <sdx:MeshGeometryModel3D x:Name="WallYModel"
+                                         IsTransparent="True"
+                                         RenderOrder="0"
+                                         CullMode="None" />
+                <sdx:MeshGeometryModel3D x:Name="WallZModel"
+                                         IsTransparent="True"
+                                         RenderOrder="0"
+                                         CullMode="None" />
                 <sdx:PointGeometryModel3D x:Name="ScatterModel"
                                           Geometry="{Binding ScatterGeometry}"
                                           Size="1.5 1.5"
@@ -54,7 +59,6 @@
                                         Color="White" />
             </sdx:Viewport3DX>
         </Grid>
-        <!-- Parameter Panel -->
         <DockPanel Grid.Column="1"
                    LastChildFill="True"
                    Background="#FAFAFA">
@@ -185,30 +189,53 @@
                         </StackPanel>
                         <!-- 2D Projections -->
                         <Separator Margin="0,12,0,8" />
-                        <TextBlock Text="2D Projections (Non-interactive)" FontWeight="Bold" />
-                        <UniformGrid Columns="3" Margin="0,6,0,0">
+                        <TextBlock Text="2D Projections (Non-interactive)"
+                                   FontWeight="Bold" />
+                        <UniformGrid Columns="3"
+                                     Margin="0,6,0,0">
                             <StackPanel Margin="0,0,6,0">
-                                <TextBlock Text="XY (view Z)" HorizontalAlignment="Center" />
-                                <Border Width="210" Height="210" Background="White" BorderBrush="#DDDDDD" BorderThickness="1">
-                                    <Image x:Name="ImgXY" Stretch="Fill" />
+                                <TextBlock Text="XY (view Z)"
+                                           HorizontalAlignment="Center" />
+                                <Border Width="210"
+                                        Height="210"
+                                        Background="White"
+                                        BorderBrush="#DDDDDD"
+                                        BorderThickness="1">
+                                    <Image x:Name="ImgXY"
+                                           Stretch="Fill" />
                                 </Border>
                             </StackPanel>
                             <StackPanel Margin="0,0,6,0">
-                                <TextBlock Text="XZ (view Y)" HorizontalAlignment="Center" />
-                                <Border Width="210" Height="210" Background="White" BorderBrush="#DDDDDD" BorderThickness="1">
-                                    <Image x:Name="ImgXZ" Stretch="Fill" />
+                                <TextBlock Text="XZ (view Y)"
+                                           HorizontalAlignment="Center" />
+                                <Border Width="210"
+                                        Height="210"
+                                        Background="White"
+                                        BorderBrush="#DDDDDD"
+                                        BorderThickness="1">
+                                    <Image x:Name="ImgXZ"
+                                           Stretch="Fill" />
                                 </Border>
                             </StackPanel>
                             <StackPanel>
-                                <TextBlock Text="YZ (view X)" HorizontalAlignment="Center" />
-                                <Border Width="210" Height="210" Background="White" BorderBrush="#DDDDDD" BorderThickness="1">
-                                    <Image x:Name="ImgYZ" Stretch="Fill" />
+                                <TextBlock Text="YZ (view X)"
+                                           HorizontalAlignment="Center" />
+                                <Border Width="210"
+                                        Height="210"
+                                        Background="White"
+                                        BorderBrush="#DDDDDD"
+                                        BorderThickness="1">
+                                    <Image x:Name="ImgYZ"
+                                           Stretch="Fill" />
                                 </Border>
                             </StackPanel>
                         </UniformGrid>
                         <!-- Camera View Controls -->
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <TextBlock Text="Camera View:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,8,0,0">
+                            <TextBlock Text="Camera View:"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,6,0" />
                             <Button Name="BtnViewXY"
                                     Content="XY視点(Z方向)"
                                     Width="120"
@@ -220,12 +247,50 @@
                                     Width="120"
                                     Height="28"
                                     Margin="0,0,6,0"
-                                    Click="BtnViewXZ_Click"/>
+                                    Click="BtnViewXZ_Click" />
                             <Button Name="BtnViewYZ"
                                     Content="YZ視点(X方向)"
                                     Width="120"
                                     Height="28"
-                                    Click="BtnViewYZ_Click"/>
+                                    Click="BtnViewYZ_Click" />
+                        </StackPanel>
+                        <!-- Plane Visibility Controls -->
+                        <StackPanel Orientation="Vertical"
+                                    Margin="10,0,0,0">
+                            <TextBlock Text="Plane Visibility"
+                                       FontWeight="Bold" />
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,6,0,0">
+                                <CheckBox x:Name="ChkPlaneXY"
+                                          Content="XY (Z=0)"
+                                          IsChecked="True"
+                                          Margin="0,0,12,0"
+                                          Checked="ChkPlane_CheckedChanged"
+                                          Unchecked="ChkPlane_CheckedChanged" />
+                                <CheckBox x:Name="ChkPlaneYZ"
+                                          Content="YZ (X=0)"
+                                          IsChecked="True"
+                                          Margin="0,0,12,0"
+                                          Checked="ChkPlane_CheckedChanged"
+                                          Unchecked="ChkPlane_CheckedChanged" />
+                                <CheckBox x:Name="ChkPlaneXZ"
+                                          Content="XZ (Y=0)"
+                                          IsChecked="True"
+                                          Checked="ChkPlane_CheckedChanged"
+                                          Unchecked="ChkPlane_CheckedChanged" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,6,0,0">
+                                <TextBlock Text="Opacity:"
+                                           VerticalAlignment="Center" />
+                                <Slider x:Name="SldPlaneOpacity"
+                                        Minimum="0.1"
+                                        Maximum="0.9"
+                                        Value="0.35"
+                                        Width="160"
+                                        Margin="8,0,0,0"
+                                        ValueChanged="SldPlaneOpacity_ValueChanged" />
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
