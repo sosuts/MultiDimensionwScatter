@@ -4,8 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MultiDimensionwScatter"
-        xmlns:ht="http://helix-toolkit.org/wpf"
-        xmlns:ht2="clr-namespace:HelixToolkit.Wpf;assembly=HelixToolkit.Wpf"
+        xmlns:sdx="http://helix-toolkit.org/wpf/SharpDX"
         mc:Ignorable="d"
         Title="3D Gaussian Mixture Scatter"
         Height="700"
@@ -15,29 +14,39 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="700" />
         </Grid.ColumnDefinitions>
-        <!-- Plot Area -->
+        <!-- Plot Area (SharpDX) -->
         <Grid Grid.Column="0"
               Background="White">
-            <ht:HelixViewport3D Name="Viewport"
-                                ShowCameraInfo="False"
-                                ShowFieldOfView="False"
-                                ZoomExtentsWhenLoaded="True"
-                                ShowViewCube="False">
-                <!-- ライトを追加 -->
-                <ht:DefaultLights />
-                <!-- X 軸 -->
-                <ht:LinesVisual3D Points="0,0,0 5,0,0"
-                                  Thickness="4"
-                                  Color="Red" />
-                <!-- Y 軸 -->
-                <ht:LinesVisual3D Points="0,0,0 0,5,0"
-                                  Thickness="4"
-                                  Color="Green" />
-                <!-- Z 軸 -->
-                <ht:LinesVisual3D Points="0,0,0 0,0,5"
-                                  Thickness="4"
-                                  Color="Blue" />
-            </ht:HelixViewport3D>
+
+            <sdx:Viewport3DX x:Name="Viewport"
+                             ShowCoordinateSystem="True"
+                             ShowViewCube="True"
+                             ZoomExtentsWhenLoaded="True"
+                             EffectsManager="{Binding EffectsManager}">
+                <sdx:Viewport3DX.Camera>
+                    <sdx:PerspectiveCamera Position="10,10,10"
+                                           LookDirection="-10,-10,-10"
+                                           UpDirection="0,1,0"
+                                           FieldOfView="60" />
+                </sdx:Viewport3DX.Camera>
+                <sdx:DirectionalLight3D Direction="-1,-1,-1"
+                                        Color="White" />
+                <sdx:PointGeometryModel3D x:Name="ScatterModel"
+                                          Geometry="{Binding ScatterGeometry}"
+                                          Size="1.5 1.5"
+                                          Figure="Ellipse"
+                                          Color="DodgerBlue" />
+                <sdx:DirectionalLight3D Direction="-1,-1,-1"
+                                        Color="White" />
+            </sdx:Viewport3DX>
+            <Button Name="BtnDrawSample"
+                    Content="サンプル描画"
+                    Width="120"
+                    Height="32"
+                    VerticalAlignment="Top"
+                    HorizontalAlignment="Left"
+                    Margin="10"
+                    Click="BtnDrawSample_Click" />
         </Grid>
         <!-- Parameter Panel -->
         <DockPanel Grid.Column="1"
