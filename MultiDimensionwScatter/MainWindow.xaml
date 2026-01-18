@@ -29,8 +29,21 @@
                                            UpDirection="0,1,0"
                                            FieldOfView="60" />
                 </sdx:Viewport3DX.Camera>
+
                 <sdx:DirectionalLight3D Direction="-1,-1,-1"
                                         Color="White" />
+
+                <!-- Axes -->
+                <sdx:LineGeometryModel3D x:Name="AxisXModel"
+                                         Color="Red"
+                                         Thickness="1.0" />
+                <sdx:LineGeometryModel3D x:Name="AxisYModel"
+                                         Color="LimeGreen"
+                                         Thickness="1.0" />
+                <sdx:LineGeometryModel3D x:Name="AxisZModel"
+                                         Color="DodgerBlue"
+                                         Thickness="1.0" />
+
                 <sdx:PointGeometryModel3D x:Name="ScatterModel"
                                           Geometry="{Binding ScatterGeometry}"
                                           Size="1.5 1.5"
@@ -162,6 +175,13 @@
                                     Height="32"
                                     Margin="8,0,0,0"
                                     Click="BtnClear_Click" />
+                            <!-- 共分散ランダム生成ボタン -->
+                            <Button Name="BtnRandomCov"
+                                    Content="共分散をランダム生成"
+                                    Width="180"
+                                    Height="32"
+                                    Margin="8,0,0,0"
+                                    Click="BtnRandomCov_Click" />
                         </StackPanel>
 
                         <!-- Volume controls -->
@@ -183,6 +203,30 @@
                                 <Slider Name="SliderZ" Minimum="0" Maximum="63" Value="32" Width="110" ValueChanged="SliderZ_ValueChanged"/>
                             </StackPanel>
                         </StackPanel>
+
+                        <!-- 2D Projections -->
+                        <Separator Margin="0,12,0,8" />
+                        <TextBlock Text="2D Projections (Non-interactive)" FontWeight="Bold" />
+                        <UniformGrid Columns="3" Margin="0,6,0,0">
+                            <StackPanel Margin="0,0,6,0">
+                                <TextBlock Text="XY (view Z)" HorizontalAlignment="Center" />
+                                <Border Width="210" Height="210" Background="White" BorderBrush="#DDDDDD" BorderThickness="1">
+                                    <Image x:Name="ImgXY" Stretch="Fill" />
+                                </Border>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,6,0">
+                                <TextBlock Text="XZ (view Y)" HorizontalAlignment="Center" />
+                                <Border Width="210" Height="210" Background="White" BorderBrush="#DDDDDD" BorderThickness="1">
+                                    <Image x:Name="ImgXZ" Stretch="Fill" />
+                                </Border>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="YZ (view X)" HorizontalAlignment="Center" />
+                                <Border Width="210" Height="210" Background="White" BorderBrush="#DDDDDD" BorderThickness="1">
+                                    <Image x:Name="ImgYZ" Stretch="Fill" />
+                                </Border>
+                            </StackPanel>
+                        </UniformGrid>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
