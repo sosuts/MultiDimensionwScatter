@@ -52,14 +52,6 @@
                 <sdx:DirectionalLight3D Direction="-1,-1,-1"
                                         Color="White" />
             </sdx:Viewport3DX>
-            <Button Name="BtnDrawSample"
-                    Content="サンプル描画"
-                    Width="120"
-                    Height="32"
-                    VerticalAlignment="Top"
-                    HorizontalAlignment="Left"
-                    Margin="10"
-                    Click="BtnDrawSample_Click" />
         </Grid>
         <!-- Parameter Panel -->
         <DockPanel Grid.Column="1"
@@ -182,28 +174,14 @@
                                     Height="32"
                                     Margin="8,0,0,0"
                                     Click="BtnRandomCov_Click" />
+                            <!-- 平均ランダム化ボタン -->
+                            <Button Name="BtnRandomMean"
+                                    Content="平均をランダム化"
+                                    Width="150"
+                                    Height="32"
+                                    Margin="8,0,0,0"
+                                    Click="BtnRandomMean_Click" />
                         </StackPanel>
-
-                        <!-- Volume controls -->
-                        <Separator Margin="0,12,0,8" />
-                        <TextBlock Text="Volume (Analytic GMM Density)" FontWeight="Bold" />
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <TextBlock Text="Resolution:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox Name="TxtVolRes" Width="60" Text="64"/>
-                            <TextBlock Text="  Bounds ±σ:" VerticalAlignment="Center" Margin="12,0,6,0"/>
-                            <TextBox Name="TxtSigmaK" Width="40" Text="3"/>
-                            <Button Name="BtnGenVol" Content="ボリューム生成" Width="120" Margin="12,0,0,0" Click="BtnGenVol_Click"/>
-                            <Button Name="BtnClearVol" Content="ボリューム消去" Width="120" Margin="6,0,0,0" Click="BtnClearVol_Click"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Vertical" Margin="0,6,0,0">
-                            <TextBlock Text="Slices (X/Y/Z)" />
-                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                <Slider Name="SliderX" Minimum="0" Maximum="63" Value="32" Width="110" Margin="0,0,6,0" ValueChanged="SliderX_ValueChanged"/>
-                                <Slider Name="SliderY" Minimum="0" Maximum="63" Value="32" Width="110" Margin="0,0,6,0" ValueChanged="SliderY_ValueChanged"/>
-                                <Slider Name="SliderZ" Minimum="0" Maximum="63" Value="32" Width="110" ValueChanged="SliderZ_ValueChanged"/>
-                            </StackPanel>
-                        </StackPanel>
-
                         <!-- 2D Projections -->
                         <Separator Margin="0,12,0,8" />
                         <TextBlock Text="2D Projections (Non-interactive)" FontWeight="Bold" />
@@ -227,6 +205,27 @@
                                 </Border>
                             </StackPanel>
                         </UniformGrid>
+                        <!-- Camera View Controls -->
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="Camera View:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Button Name="BtnViewXY"
+                                    Content="XY視点(Z方向)"
+                                    Width="120"
+                                    Height="28"
+                                    Margin="0,0,6,0"
+                                    Click="BtnViewXY_Click" />
+                            <Button Name="BtnViewXZ"
+                                    Content="XZ視点(Y方向)"
+                                    Width="120"
+                                    Height="28"
+                                    Margin="0,0,6,0"
+                                    Click="BtnViewXZ_Click"/>
+                            <Button Name="BtnViewYZ"
+                                    Content="YZ視点(X方向)"
+                                    Width="120"
+                                    Height="28"
+                                    Click="BtnViewYZ_Click"/>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

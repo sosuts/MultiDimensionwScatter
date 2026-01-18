@@ -35,38 +35,6 @@ namespace MultiDimensionwScatter
             // 初期軸描画
             UpdateAxes();
         }
-        private void BtnDrawSample_Click(object sender, RoutedEventArgs e)
-        {
-            int pointCount = 1000;
-            var random = new Random();
-
-            _scatterGeometry.Positions.Clear();
-            _scatterGeometry.Colors.Clear();
-
-            for (int i = 0; i < pointCount; i++)
-            {
-                float x = (float)(random.NextDouble() * 10 - 5);
-                float y = (float)(random.NextDouble() * 10 - 5);
-                float z = (float)(random.NextDouble() * 10 - 5);
-
-                _scatterGeometry.Positions.Add(new Vector3(x, y, z));
-                _scatterGeometry.Colors.Add(
-                    new Color4(
-                        (float)random.NextDouble(),
-                        (float)random.NextDouble(),
-                        (float)random.NextDouble(),
-                        1f));
-            }
-
-            _scatterGeometry.UpdateBounds();
-            ScatterModel.Size = new Size(5, 5);
-
-            Viewport.ZoomExtents();
-
-            UpdateAxes();
-            UpdateProjections();
-        }
-
         private void InitializeDefaults()
         {
             _components.Add(new ComponentParam
@@ -638,6 +606,177 @@ namespace MultiDimensionwScatter
                 { A[0,1], A[1,1], A[2,1] },
                 { A[0,2], A[1,2], A[2,2] },
             };
+        }
+
+        // カメラ視点切替ボタンのハンドラ
+        private void BtnViewXY_Click(object sender, RoutedEventArgs e)
+        {
+            // XY投影: U=X(水平), V=Y(垂直)。Z方向から見る。Upは+Y
+            SetCameraToAxisViewOrtho('X', 'Y', new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+        }
+
+        private void BtnViewXZ_Click(object sender, RoutedEventArgs e)
+        {
+            // XZ投影: U=X(水平), V=Z(垂直)。Y方向から見る。Upは+Z
+            SetCameraToAxisViewOrtho('X', 'Z', new Vector3(0, 1, 0), new Vector3(0, 0, 1));
+        }
+
+        private void BtnViewYZ_Click(object sender, RoutedEventArgs e)
+        {
+            // YZ投影: U=Y(水平), V=Z(垂直)。X方向から見る。Upは+Z
+            SetCameraToAxisViewOrtho('Y', 'Z', new Vector3(-1, 0, 0), new Vector3(0, 0, 1));
+        }
+
+        private void SetCameraToAxisViewOrtho(char axisU, char axisV, Vector3 lookDirUnit, Vector3 upDirUnit)
+        {
+            try
+            {
+                GetSceneCenterAndRadius(out var center, out float radius);
+                float distance = Math.Max(5f, radius * 2.5f);
+
+                var geom = ScatterModel.Geometry as PointGeometry3D ?? _scatterGeometry;
+                double GetComp(Vector3 v, char axis)
+                {
+                    switch (axis)
+                    {
+                        case 'X': return v.X;
+                        case 'Y': return v.Y;
+                        case 'Z': return v.Z;
+                        default: return 0.0;
+                    }
+                }
+
+                double minU = double.PositiveInfinity, maxU = double.NegativeInfinity;
+                double minV = double.PositiveInfinity, maxV = double.NegativeInfinity;
+
+                if (geom?.Positions != null && geom.Positions.Count > 0)
+                {
+                    for (int i = 0; i < geom.Positions.Count; i++)
+                    {
+                        var p = geom.Positions[i];
+                        double u = GetComp(p, axisU);
+                        double v = GetComp(p, axisV);
+                        if (u < minU) minU = u; if (u > maxU) maxU = u;
+                        if (v < minV) minV = v; if (v > maxV) maxV = v;
+                    }
+                }
+                else
+                {
+                    minU = -5; maxU = 5;
+                    minV = -5; maxV = 5;
+                }
+
+                if (!(maxU > minU)) { var c = (minU + maxU) * 0.5; minU = c - 1; maxU = c + 1; }
+                if (!(maxV > minV)) { var c = (minV + maxV) * 0.5; minV = c - 1; maxV = c + 1; }
+                double rangeU = maxU - minU;
+                double rangeV = maxV - minV;
+                double width = Math.Max(rangeU, rangeV) * 1.05;
+
+                var look = new System.Windows.Media.Media3D.Vector3D(lookDirUnit.X, lookDirUnit.Y, lookDirUnit.Z);
+                var up = new System.Windows.Media.Media3D.Vector3D(upDirUnit.X, upDirUnit.Y, upDirUnit.Z);
+                var c3 = new System.Windows.Media.Media3D.Point3D(center.X, center.Y, center.Z);
+                var pos = new System.Windows.Media.Media3D.Point3D(
+                    c3.X - look.X * distance,
+                    c3.Y - look.Y * distance,
+                    c3.Z - look.Z * distance);
+
+                // HelixToolkit の OrthographicCamera を使用することが重要
+                var cam = new HelixToolkit.Wpf.SharpDX.OrthographicCamera
+                {
+                    Position = pos,
+                    LookDirection = new System.Windows.Media.Media3D.Vector3D(look.X * distance, look.Y * distance, look.Z * distance),
+                    UpDirection = up,
+                    Width = width
+                };
+
+                Viewport.Camera = cam;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"カメラ設定エラー: {ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // シーンの中心点と概算半径を求める
+        private void GetSceneCenterAndRadius(out Vector3 center, out float radius)
+        {
+            var geom = ScatterModel.Geometry as PointGeometry3D ?? _scatterGeometry;
+            if (geom?.Positions != null && geom.Positions.Count > 0)
+            {
+                float minX = geom.Positions.Min(p => p.X);
+                float maxX = geom.Positions.Max(p => p.X);
+                float minY = geom.Positions.Min(p => p.Y);
+                float maxY = geom.Positions.Max(p => p.Y);
+                float minZ = geom.Positions.Min(p => p.Z);
+                float maxZ = geom.Positions.Max(p => p.Z);
+
+                center = new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f);
+
+                var dx = maxX - minX;
+                var dy = maxY - minY;
+                var dz = maxZ - minZ;
+                radius = (float)Math.Max(Math.Max(dx, dy), dz) * 0.5f;
+            }
+            else
+            {
+                // データがない場合は原点・既定半径
+                center = new Vector3(0, 0, 0);
+                radius = 5f;
+            }
+        }
+
+        private void BtnRandomMean_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 可能ならSeedを利用、なければ時間ベース
+                int seed;
+                var rng = int.TryParse(TxtSeed.Text, out seed) ? new Random(seed) : new Random(Environment.TickCount);
+
+                // 現在のシーンの中心と半径（既存点群があればそれを使用）
+                GetSceneCenterAndRadius(out var center, out float radius);
+
+                // ランダム化のスケールを決定
+                // - 既存点群がない場合: 既定半径を使用
+                // - 既存平均がある場合は、その分布スケールに合わせる
+                double baseScale = Math.Max(1.0, radius);
+
+                // 各成分の平均を適度にランダム化
+                // 方向は一様球面、距離は0〜baseScale*0.6程度
+                foreach (var c in _components)
+                {
+                    var offset = RandomDirection(rng);
+                    double dist = (rng.NextDouble()) * (baseScale * 0.6); // 最大距離
+                    double dx = offset.X * dist;
+                    double dy = offset.Y * dist;
+                    double dz = offset.Z * dist;
+
+                    // 既存平均を中心寄せするか、シーン中心からのオフセットかを選択
+                    // ここでは「現在の平均を基準に少し動かす」方が直感的
+                    c.MeanX = c.MeanX + dx;
+                    c.MeanY = c.MeanY + dy;
+                    c.MeanZ = c.MeanZ + dz;
+                }
+
+                // UI反映
+                GridComponents.Items.Refresh();
+
+                MessageBox.Show("各成分の平均をランダムに更新しました。", "完了", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"平均ランダム化でエラー: {ex.Message}", "例外", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // 一様球面方向ベクトル（double）を生成
+        private static V3 RandomDirection(Random rng)
+        {
+            // cos(theta) を[-1,1]一様、phi を[0,2π)一様
+            double u = rng.NextDouble() * 2.0 - 1.0; // cos(theta)
+            double phi = rng.NextDouble() * 2.0 * Math.PI;
+            double s = Math.Sqrt(Math.Max(0.0, 1.0 - u * u));
+            return new V3(s * Math.Cos(phi), s * Math.Sin(phi), u);
         }
     }
 }
