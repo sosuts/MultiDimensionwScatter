@@ -35,14 +35,6 @@ namespace MultiDimensionwScatter.Helpers
                 }
             }
 
-            char GetDepthAxis(char axisU, char axisV)
-            {
-                if ((axisU == 'X' && axisV == 'Y') || (axisU == 'Y' && axisV == 'X')) return 'Z';
-                if ((axisU == 'X' && axisV == 'Z') || (axisU == 'Z' && axisV == 'X')) return 'Y';
-                if ((axisU == 'Y' && axisV == 'Z') || (axisU == 'Z' && axisV == 'Y')) return 'X';
-                return 'Z';
-            }
-
             double minU = double.PositiveInfinity, maxU = double.NegativeInfinity;
             double minV = double.PositiveInfinity, maxV = double.NegativeInfinity;
             for (int i = 0; i < positions.Count; i++)
@@ -72,7 +64,6 @@ namespace MultiDimensionwScatter.Helpers
             double r = Math.Max(1.0, pointSize.Width * 0.6);
 
             // Build a pixel-to-color map using majority voting for overlapping particles
-            char depthAxis = GetDepthAxis(axisU, axisV);
             var pixelMap = new Dictionary<(int, int), Dictionary<System.Windows.Media.Color, int>>();
 
             for (int i = 0; i < positions.Count; i++)
