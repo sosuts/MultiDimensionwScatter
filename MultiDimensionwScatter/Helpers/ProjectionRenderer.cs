@@ -35,6 +35,14 @@ namespace MultiDimensionwScatter.Helpers
                 }
             }
 
+            char GetDepthAxis(char axisU, char axisV)
+            {
+                if ((axisU == 'X' && axisV == 'Y') || (axisU == 'Y' && axisV == 'X')) return 'Z';
+                if ((axisU == 'X' && axisV == 'Z') || (axisU == 'Z' && axisV == 'X')) return 'Y';
+                if ((axisU == 'Y' && axisV == 'Z') || (axisU == 'Z' && axisV == 'Y')) return 'X';
+                return 'Z';
+            }
+
             double minU = double.PositiveInfinity, maxU = double.NegativeInfinity;
             double minV = double.PositiveInfinity, maxV = double.NegativeInfinity;
             for (int i = 0; i < positions.Count; i++)
@@ -63,49 +71,102 @@ namespace MultiDimensionwScatter.Helpers
 
             double r = Math.Max(1.0, pointSize.Width * 0.6);
 
+            // Build a pixel-to-color map using majority voting for overlapping particles
+            char depthAxis = GetDepthAxis(axisU, axisV);
+            var pixelMap = new Dictionary<(int, int), Dictionary<System.Windows.Media.Color, int>>();
+
+            for (int i = 0; i < positions.Count; i++)
+            {
+                var p = positions[i];
+                double u = GetComp(p, axisU);
+                double v = GetComp(p, axisV);
+                double x = (u - minU) * scale + offsetX;
+                double y = pixelH - ((v - minV) * scale + offsetY);
+
+                System.Windows.Media.Color col;
+                if (colors != null && colors.Count == positions.Count)
+                {
+                    var c4 = colors[i];
+                    byte a = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Alpha)) * 255.0);
+                    byte r8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Red)) * 255.0);
+                    byte g8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Green)) * 255.0);
+                    byte b8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Blue)) * 255.0);
+                    col = System.Windows.Media.Color.FromArgb(a, r8, g8, b8);
+                }
+                else if (fallbackColor.HasValue)
+                {
+                    var fc = fallbackColor.Value;
+                    byte a = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Alpha)) * 255.0);
+                    byte r8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Red)) * 255.0);
+                    byte g8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Green)) * 255.0);
+                    byte b8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Blue)) * 255.0);
+                    col = System.Windows.Media.Color.FromArgb(a, r8, g8, b8);
+                }
+                else
+                {
+                    col = System.Windows.Media.Colors.DodgerBlue;
+                }
+
+                // Determine the pixel region this point covers
+                int minPx = (int)Math.Floor(x - r * 0.5);
+                int maxPx = (int)Math.Ceiling(x + r * 0.5);
+                int minPy = (int)Math.Floor(y - r * 0.5);
+                int maxPy = (int)Math.Ceiling(y + r * 0.5);
+
+                for (int px = minPx; px <= maxPx; px++)
+                {
+                    for (int py = minPy; py <= maxPy; py++)
+                    {
+                        if (px < 0 || px >= pixelW || py < 0 || py >= pixelH) continue;
+
+                        var key = (px, py);
+                        if (!pixelMap.TryGetValue(key, out var colorVotes))
+                        {
+                            colorVotes = new Dictionary<System.Windows.Media.Color, int>();
+                            pixelMap[key] = colorVotes;
+                        }
+
+                        if (!colorVotes.ContainsKey(col))
+                        {
+                            colorVotes[col] = 0;
+                        }
+                        colorVotes[col]++;
+                    }
+                }
+            }
+
+            // Now render using the majority-voted colors
             var dv = new DrawingVisual();
             using (var dc = dv.RenderOpen())
             {
                 dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, pixelW, pixelH));
                 var brushCache = new Dictionary<System.Windows.Media.Color, SolidColorBrush>();
-                for (int i = 0; i < positions.Count; i++)
-                {
-                    var p = positions[i];
-                    double u = GetComp(p, axisU);
-                    double v = GetComp(p, axisV);
-                    double x = (u - minU) * scale + offsetX;
-                    double y = pixelH - ((v - minV) * scale + offsetY);
 
-                    System.Windows.Media.Color col;
-                    if (colors != null && colors.Count == positions.Count)
+                foreach (var kvp in pixelMap)
+                {
+                    var (px, py) = kvp.Key;
+                    var colorVotes = kvp.Value;
+
+                    // Find the color with the most votes
+                    System.Windows.Media.Color majorityColor = System.Windows.Media.Colors.White;
+                    int maxVotes = 0;
+                    foreach (var vote in colorVotes)
                     {
-                        var c4 = colors[i];
-                        byte a = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Alpha)) * 255.0);
-                        byte r8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Red)) * 255.0);
-                        byte g8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Green)) * 255.0);
-                        byte b8 = (byte)Math.Round(Math.Max(0, Math.Min(1, c4.Blue)) * 255.0);
-                        col = System.Windows.Media.Color.FromArgb(a, r8, g8, b8);
+                        if (vote.Value > maxVotes)
+                        {
+                            maxVotes = vote.Value;
+                            majorityColor = vote.Key;
+                        }
                     }
-                    else if (fallbackColor.HasValue)
+
+                    if (!brushCache.TryGetValue(majorityColor, out var brush))
                     {
-                        var fc = fallbackColor.Value;
-                        byte a = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Alpha)) * 255.0);
-                        byte r8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Red)) * 255.0);
-                        byte g8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Green)) * 255.0);
-                        byte b8 = (byte)Math.Round(Math.Max(0, Math.Min(1, fc.Blue)) * 255.0);
-                        col = System.Windows.Media.Color.FromArgb(a, r8, g8, b8);
-                    }
-                    else
-                    {
-                        col = System.Windows.Media.Colors.DodgerBlue;
-                    }
-                    if (!brushCache.TryGetValue(col, out var brush))
-                    {
-                        brush = new SolidColorBrush(col);
+                        brush = new SolidColorBrush(majorityColor);
                         brush.Freeze();
-                        brushCache[col] = brush;
+                        brushCache[majorityColor] = brush;
                     }
-                    dc.DrawRectangle(brush, null, new Rect(x - r * 0.5, y - r * 0.5, Math.Max(1.0, r), Math.Max(1.0, r)));
+
+                    dc.DrawRectangle(brush, null, new Rect(px, py, 1, 1));
                 }
             }
             var rtb = new RenderTargetBitmap(pixelW, pixelH, 96, 96, PixelFormats.Pbgra32);
